@@ -23,6 +23,15 @@
         return obj;
     }
 
+    function filterProperties(obj, fn) {
+        var newObj = {};
+        Object.keys(obj).forEach(function (key) {
+            if (fn(obj[key]))
+                newObj[key] = obj[key];
+        });
+        return newObj;
+    }
+
     function derive(Child) {
         return {
             from: function (Parent) {
@@ -132,16 +141,29 @@
                 ///  "*"  means value is multiEntry, <br/>
                 ///  "++" means auto-increment and only applicable for primary key <br/>
                 /// </param>
+                var self = this;
                 this._cfg.storesSource = this._cfg.storesSource ? extend(this._cfg.storesSource, stores) : stores;
 
                 // Derive stores from earlier versions if they are not explicitely specified as null or a new syntax.
                 var storesSpec = {};
+                // Disregard deleted stores for upgrade schema.
+                var upgradeStoresSpec = {};
                 versions.forEach(function (version) { // 'versions' is always sorted by lowest version first.
+                    if (version === self) {
+                        var nonDeleteStoresSource = filterProperties(version._cfg.storesSource, function (v) {
+                            return v !== null;
+                        });
+                        extend(upgradeStoresSpec, storesSpec);
+                        extend(upgradeStoresSpec, nonDeleteStoresSource);
+                    }
                     extend(storesSpec, version._cfg.storesSource);
                 });
 
+
                 var dbschema = (this._cfg.dbschema = {});
                 this._parseStoresSpec(storesSpec, dbschema);
+                var preUpgradeDbSchema = (this._cfg.preUpgradeDbSchema = {});
+                this._parseStoresSpec(upgradeStoresSpec, preUpgradeDbSchema);
                 // Update the latest schema to this version
                 // Update API
                 globalSchema = db._dbSchema = dbschema;
@@ -216,8 +238,10 @@
                     /// <param name="version" type="Version"></param>
                     var oldSchema = globalSchema;
                     var newSchema = version._cfg.dbschema;
+                    var updateSchema = version._cfg.preUpgradeDbSchema;
                     adjustToExistingIndexNames(oldSchema, idbtrans);
                     adjustToExistingIndexNames(newSchema, idbtrans);
+                    adjustToExistingIndexNames(updateSchema, idbtrans);
                     globalSchema = db._dbSchema = newSchema;
                     {
                         var diff = getSchemaDiff(oldSchema, newSchema);
@@ -250,7 +274,7 @@
                         if (version._cfg.contentUpgrade) {
                             queue.push(function (idbtrans, cb) {
                                 anyContentUpgraderHasRun = true;
-                                var t = db._createTransaction(READWRITE, [].slice.call(idbtrans.db.objectStoreNames, 0), newSchema);
+                                var t = db._createTransaction(READWRITE, [].slice.call(idbtrans.db.objectStoreNames, 0), updateSchema);
                                 t.idbtrans = idbtrans;
                                 var uncompletedRequests = 0;
                                 t._promise = override(t._promise, function (orig_promise) {

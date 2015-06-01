@@ -155,6 +155,7 @@
             // Now test: Remove an object store while running an upgrade function.
             //
             db = new Dexie(DBNAME);
+            db.version(7).stores({ store2: "uuid" });
             db.version(8).stores({ store1: null });
             db.version(9).stores({ store1: "++id,*email" });
             db.version(10).stores({ store1: null }).upgrade(function (trans) {
