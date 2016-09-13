@@ -148,8 +148,10 @@ export default function Dexie(dbName, options) {
         /// <returns type="Version"></returns>
         if (idbdb || isBeingOpened)
             throw new exceptions.Schema("Cannot add version when database is open");
-        
-        var version = versions.find(v => v._cfg.version === versionNumber);
+
+        // Changed versions.find() to versions.filter() because of IE compatibility issues
+        function findVersionNumber(v) { return v._cfg.version === versionNumber; }
+        var version = versions.filter(findVersionNumber)[0];
         if (version) return version;
         version = new Version(versionNumber);
         versions.push(version);
@@ -199,7 +201,8 @@ export default function Dexie(dbName, options) {
             var preUpgradeStoresSpec = {};
             var postUpgradeStoresSpec = {};
 
-            for (let version of versions) {
+            for (let i = 0, ii = versions.length; i < ii; i++) {
+                let version = versions[i];
                 if (version === this) {
                     var undeleted = filter(version._cfg.storesSource,
                                            v => v !== null);
@@ -353,7 +356,7 @@ export default function Dexie(dbName, options) {
                                 name,
                                 spec.primKey,
                                 spec.indexes);
-                };
+                }
                 Promise.follow(() => db.on.populate.fire(trans))
                        .catch(rejectTransaction);
             } else {
@@ -480,7 +483,7 @@ export default function Dexie(dbName, options) {
                         name,
                         spec.primKey,
                         spec.indexes);
-        };
+        }
     }
 
     function addIndex(store, idx) {
